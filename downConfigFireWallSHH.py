@@ -1,10 +1,11 @@
-##coding: utf-8
+#!/usr/bin/env python
+#coding: utf-8
 ########################################################################
 #Programmer: Deiner Zapata Silva
 #e-mail: deinerzapata@gmail.com
 #Date: 13/11/2018
-#
-#
+#https://cpiekarski.com/2011/05/09/super-easy-python-json-client-server/
+#http://46.101.4.154/Artículos%20técnicos/Python/Paramiko%20-%20Conexiones%20SSH%$
 #
 import paramiko as pmk
 import sys, json, socket, time, argparse
@@ -66,7 +67,7 @@ def get_lista(lineTxt):
 ###############################################################################
 def process_line(lineTxt):
     command =  field = value =""
-    idx_ini_01 = lineTxt.find("$ #")        # linea inicial
+    idx_ini_01 = lineTxt.find(" $ #")       # linea inicial
     idx_ini_02 = lineTxt.find("Run Time")   # linea inicial
     idx_equal = lineTxt.find("=")
     idx_michi = lineTxt.find("#")
@@ -85,7 +86,7 @@ def process_line(lineTxt):
         lista.append(lineTxt[idx_ini_01+3:idx_equal])
         lista.append(lineTxt[idx_equal+1:])
         return 1,lista
-    # Procesando caso especial "Primera Linea" -> "[JRun Time"
+    # Procesando caso especial "Primera Linea" -> "[H[JRun Time"
     if (idx_ini_02>0):
         lista.append(lineTxt[idx_ini_02:])
         return 1,lista
@@ -93,7 +94,7 @@ def process_line(lineTxt):
     level, lista = get_lista(lineTxt)
     return level,lista
 ###############################################################################
-def fileTXT_save(text, nameFile = "FortiConfBackup23.txt", typeProcess=None):
+def fileTXT_save(text, nameFile = "FortiConfBackup23.txt", processData=False):
     nameTempFile = nameFile[:nameFile.find(".")] + ".temp"
     ftemp = open(nameTempFile,"wb")
     ftemp.write( text )
@@ -103,20 +104,18 @@ def fileTXT_save(text, nameFile = "FortiConfBackup23.txt", typeProcess=None):
     ftemp = open(nameTempFile,"r")
     fnew  = open(nameFile,"w")
     cont = 0
-    if(typeProcess==None):
+    if(processData==False):
         lista_total = ""
     else:
         lista_total = []
     for line in ftemp :
-        if(typeProcess==None):
+        if(processData==False):
             line = line.replace("--More-- \n","")
-            line = line.replace("--More-- \r","")
-            line = line.replace("         \r","")
             if(len(line)==len("         \n")):
                 line = line.replace("         \n","")
             if(len(line)>0):
-                fnew.write(line) # str(aux=[line])+'\n'
-                lista_total = lista_total + line
+                fnew.write( line ) # str(aux=[line])+'\n'
+                lista_total += line
         else:
             level, lista = process_line(line)
             cont = cont + 1
@@ -160,7 +159,7 @@ def ssh_download_config(IP="0.0.0.0",USER="user",PASS="pass",PORT=2233):
     #http://www.unixfu.ch/diag-sys-top-2/
     ssh_obj = ssh_connect(IP,USER,PASS,PORT)
     outtxt,errortxt = ssh_exec_command(ssh_obj, "show full-configuration")
-    file_down = fileTXT_save(outtxt,nameFile= time.strftime("%Y%m%d")+".txt" )
+    file_down = fileTXT_save(outtxt,nameFile= time.strftime("%Y%m%d")+".txt")
     ssh_obj.close()
     send_json({'@mensaje':file_down},IP=ip_logstash,PORT=port_logstash)
     return
@@ -169,10 +168,12 @@ def ssh_get_process_runing(IP="0.0.0.0",USER="user",PASS="pass",PORT=2233):
     global ip_logstash , port_logstash
     ssh_obj = ssh_connect(IP=IP,USER=USER,PASS=PASS,PORT=PORT)
     #"diagnose hardware sysinfo memory"
-    outtxt,errortxt = ssh_exec_command(ssh_obj,'diag sys top')# --sort=name #ERROR: diag sys top-summary
+    outtxt,errortxt = ssh_exec_command(ssh_obj,'diag sys top')#top-summary# --sort=name
+    print(str(errortxt))
+    print(outtxt)
     ssh_obj.close()
     
-    lista = fileTXT_save(errortxt,nameFile= "process.txt",typeProcess=None)
+    lista = fileTXT_save(errortxt,nameFile= "process.txt")
     lista_json = simpleList2json(lista)
     send_json(lista_json,IP=ip_logstash,PORT=port_logstash)
     
@@ -180,32 +181,32 @@ def ssh_get_process_runing(IP="0.0.0.0",USER="user",PASS="pass",PORT=2233):
 ###############################################################################
 def test_logstash_conection(IP_LOGSTASH="0.0.0.0", PORT_LOGSTASH=2233):
     lista_json = {
-        '@message' : 'python test message logtash',
-        '@tags' : ['python', 'test']
+        '@message' : 'python test message logstash',
+        '@tags' : ['python', ' test'] 
     }
-    send_json(lista_json, IP=IP_LOGSTASH, PORT = PORT_LOGSTASH)
+    send_json(lista_json, IP=IP_LOGSTASH, PORT=PORT_LOGSTASH)
     return
 ###############################################################################
 def execute_by_command_cmd(command):
-    global ip , port , user , passw, ip_logstash, port_logstash
+    global ip , port , user , passw
     if(command=="check_process"):
         ssh_get_process_runing(IP=ip,USER=user,PASS=passw,PORT=port)
     if(command=="down_config"):
         ssh_download_config(IP=ip,USER=user,PASS=passw,PORT=port)
-    if(command=="test_logstash_conection"):
+    if(command=="test_conection"):
         test_logstash_conection(IP_LOGSTASH=ip_logstash,PORT_LOGSTASH=port_logstash)
     return
 ###############################################################################
 def get_parametersCMD():
     global ip , port , user , passw , command , ip_logstash , port_logstash
     parser = argparse.ArgumentParser()
+    parser.add_argument("-ip_out","--ip_out",help="IP del logstash")
+    parser.add_argument("-pp_out","--pp_out",help="Puerto del logstash")
     parser.add_argument("-i","--ip",help="Direccion ip del host")
     parser.add_argument("-pp","--port",help="Puerto del host")
     parser.add_argument("-u","--user",help="Usuario SSH")
     parser.add_argument("-p","--password",help="Password SSH")
-    parser.add_argument("-c","--command",help="Comando a ejecutar en la terminal [down_config,check_process,test_logstash_conection]")
-    parser.add_argument("-ip_out","--ip_out",help="IP del logstash")
-    parser.add_argument("-pp_out","--pp_out",help="Puerto del logstash")
+    parser.add_argument("-c","--command",help="Comando a ejecutar en la terminal [down_config,check_process,test_conection]")
 
     args = parser.parse_args()
 
@@ -225,7 +226,7 @@ def get_parametersCMD():
         print("ip\t= ["+str(ip)+"] \nport\t= ["+str(port)+"] \nuser\t= ["+str(user)+"] \n"+"passw\t= ["+str(passw)+"]")
         sys.exit(0)
     
-    if( ip_logstash==None or port_logstash==None):
+    if( ip_logstash==None or port_logstash==None and command!="test_conection"):
         print("\nERROR: Faltan parametros.")
         print("ip_out\t= ["+str(ip_logstash)+"]\npp_out\t= ["+str(port_logstash)+"]")
         sys.exit(0)
@@ -233,9 +234,7 @@ def get_parametersCMD():
     execute_by_command_cmd(command)
     return
 ###############################################################################
-if __name__=="__main__":
+if __name__ == "__main__" :
     get_parametersCMD()
     sys.exit(0)
 ###############################################################################
-
-
